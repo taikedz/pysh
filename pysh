@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
+
 THIS="$(readlink -f "$0")"
 HERE="$(dirname "$THIS")"
 
