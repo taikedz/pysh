@@ -3,11 +3,11 @@
 Script to just set up a python replacement for shell scripting with the nice-to-haves
 
 ```sh
-# Create project, add assets
-pysh create name-of-file.py
+# Create project, add assets and executable
+pysh path/to/name-of-file.py
 
 # Load venv etc, run script
-pysh run name-of-file.py
+path/to/name-of-file.py.sh
 ```
 
 ## Limitations
