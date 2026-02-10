@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+
+THIS="$(readlink -f "$0")"
+HERE="$(dirname "$THIS")"
+
+fail() {
+    echo "$*"
+    exit 1
+}
+
+main() {
+    target="$1"; shift
+    targetdir="$(dirname "$target")"
+
+    [[ -n "$target" ]] || fail "Specify target file"
+
+    if [[ ! -f "$target" ]]; then
+        cp "$HERE/files/base.py" "$target"
+    fi
+    if [[ ! -f "$targetdir/pysh.py" ]]; then
+        # TODO Replace with a requirements.txt entry eventually
+        cp "$HERE/files/pysh.py" "$targetdir/pysh.py"
+    fi
+
+    if [[ -f "$targetdir/.gitignore" ]] && ! grep -Eq '\*.pyc' "$targetdir/.gitignore"; then
+        echo "*.pyc" >> "$targetdir/.gitignore"
+    fi
+
+    if [[ ! -d "$targetdir/.venv" ]]; then
+        python3 -m venv "$targetdir/.venv"
+        echo "*" > "$targetdir/.venv/.gitignore"
+    fi
+
+    if [[ -f "$targetdir/requirements.txt" ]]; then
+        . "$targetdir/.venv/bin/activate"
+        pip install -r "$targetdir/requirements.txt"
+    fi
+
+    if [[ ! -f "$target.sh" ]]; then
+
+        cat <<EOF > "$target.sh"
+#!/usr/bin/env bash
+
+HEREDIR="\$(dirname "\$(readlink -f "\$0")")"
+. "\$HEREDIR/.venv/bin/activate"
+
+python3 "\$HEREDIR/$(basename $target)" "\$@"
+EOF
+        chmod 755 "$target.sh"
+    fi
+}
+
+
+main "$@"
