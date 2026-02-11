@@ -25,18 +25,23 @@ def main_wrap(_func):
 
 
 class PySh:
+    # Passthroughs
+    Path = pathlib.Path
+    isdir = os.path.isdir
+    isfile = os.path.isfile
+    remove = os.remove
+
     def __init__(self, topfile):
         self._topfile = pathlib.Path(topfile)
         self._topdir = self._topfile.parent
         self.args = ArgumentParserPysh()
         self.user = UserPysh()
 
-        # Passthroughs
-        self.Path = pathlib.Path
-        self.isdir = os.path.isdir
-        self.isfile = os.path.isfile
-        self.makedirs = lambda p: os.makedirs(p, exist_ok=True)
-        self.remove = os.remove
+
+    def makedirs(self, path):
+        """ Make directories down specified path, no error if they already exist
+        """
+        os.makedirs(path, exist_ok=True)
 
 
     def open_replacing(self, filepath, substitutions:dict[str,str]) -> str:
@@ -95,7 +100,7 @@ class PySh:
         return shlex.join(tokens)
 
 
-    def process(self, command, text=False) -> tuple[int, str|bytes, str|bytes]:
+    def cmd(self, command, text=False) -> tuple[int, str|bytes, str|bytes]:
         """ Execute a single command subprocess, return the status, stdout and stderr.
 
         Piping is not allowed.

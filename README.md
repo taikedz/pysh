@@ -14,7 +14,7 @@ Install it
 ./install.sh
 ```
 
-Use it anywhere
+Use it anywPYSH
 
 ```sh
 # Create project, add assets and executable
@@ -50,20 +50,24 @@ Scripts that rely on a series of `sudo` calls may cause each one to require a pa
 Edit your `main()` function in your main file. You can add succinct argument parsing, access OS information, and more, without tons of imports.
 
 ```python
+PYSH = pysh.PySh(__file__)
+
 def main():
-    HERE.args.positionals("+") # at least one positional argument.
-    HERE.args.flags("verbose", "--unsafe") # come out as "--verbose" and "--unsafe"
-    HERE.args.options(host="tower", user="sm", port=22)
-    args = HERE.args.parse()
+    PYSH.args.positionals("+") # at least one positional argument.
+    PYSH.args.flags("verbose", "unsafe") # specify boolean flags "--verbose" and "--unsafe"
+    PYSH.args.options(host="server1", user="me", port=22) # specify "--tower" option with default value "server1", etc
+    args = PYSH.args.parse()
 
-    assert HERE.user.confirm("Are you sure?"), "Abort" # automatically exits with status 1
+    assert PYSH.user.confirm("Are you sure?"), "Abort" # automatically exits with status 1 if not "yes" or "y"
 
-    status, stdout, stderr = HERE.process(
-        ["ssh", "-p", str(args.port), f"{args.user}@{args.host}"] + HERE.shjoin(args.positionals),
+    status, stdout, stderr = PYSH.cmd(
+        ["ssh", "-p", str(args.port), f"{args.user}@{args.host}"] + PYSH.shjoin(args.positionals),
         text=True
         )
 
     assert status == 0, f"Could not run remote command:\n{stderr}"
     print(stdout)
+
+    PYSH.shell("sha1sum /etc/hosts|cut -f1") # `shell()` allows piped command chains
 ```
 
