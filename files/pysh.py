@@ -1,4 +1,6 @@
+from genericpath import isfile
 import os
+import platform
 import sys
 import shlex
 import subprocess
@@ -121,6 +123,23 @@ class PySh:
         return os.system(command)
 
 
+    def os_info(self) -> tuple[str,str,str]:
+        """ Return the operating system name and version as of /etc/hosts (Linux and Unix only)
+        """
+        plat = platform.system().lower()
+        if os.path.isfile("/etc/os-release"):
+            with open("/etc/os-release") as fh:
+                lines = [line.split("=", maxsplit=1) for line in fh.readlines()]
+            data = {k:v.strip('\n"') for k,v in lines}
+            return platform.system(), data["ID"], data["VERSION_ID"]
+
+        elif plat == "windows":
+            return "Windows", platform.win32_edition(), platform.win32_ver()[0]
+
+        else:
+            raise RuntimeError(f"Unknown system type: {plat}")
+
+
 class UserPysh:
     def ask(self, prompt) -> str:
         """ Ask a user for input
@@ -170,19 +189,6 @@ class UserPysh:
         """ Return the current user ID
         """
         return int(os.getenv("UID", -1))
-
-
-    def os(self) -> tuple[str,str]:
-        """ Return the OS name and version as of /etc/hosts (Linux and Unix only)
-        """
-        if not os.name == "posix":
-            # TODO - implement for Windows
-            raise RuntimeError("Only available on POSIX systems")
-
-        with open("/etc/hosts") as fh:
-            lines = [line.split("=", maxsplit=1) for line in fh.readlines()]
-        data = {k:v.strip('\n"') for k,v in lines}
-        return data["ID"], data["VERSION_ID"]
 
 
 class ArgumentParserPysh:
