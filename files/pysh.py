@@ -4,15 +4,18 @@ import shlex
 import subprocess
 import argparse
 import pathlib
+import tempfile
 
 """ Convenience suite for system scripting in python
+
+Import this library to gain fast access to common desired functionality.
 """
 
 def main_wrap(_func):
     try:
         _func()
     except (KeyboardInterrupt,Exception) as e:
-        if HERE.env("PY_TRACEBACK", "false").lower() == "true":
+        if os.getenv("PY_TRACEBACK", "false").lower() == "true":
             raise
         else:
             print(e)
@@ -26,14 +29,53 @@ class PySh:
         self.args = ArgumentParserPysh()
         self.user = UserPysh()
 
+        # Passthroughs
+        self.Path = pathlib.Path
+        self.isdir = os.path.isdir
+        self.isfile = os.path.isfile
+        self.makedirs = lambda p: os.makedirs(p, exist_ok=True)
+        self.remove = os.remove
 
-    def open(self, filepath, mode='r'):
-        """ Open a file in the same directory as the current script
+
+    def open_replacing(self, filepath, substitutions:dict[str,str]) -> str:
         """
-        return open(self._topdir/filepath, mode)
+        Open filepath, and replace any key with corresponding value.
+
+        A substition dict `{'KEY': 'value'}` will replace any instances of `%KEY%` in the file
+        with literal `value`.
+
+        :param filepath: ASCII file path to open
+        :param substitutions: key-value substitutions
+        """
+        with open(filepath) as fh:
+            text = ''.join(fh.readlines())
+        for k,v in substitutions.items():
+            text = text.replace(f"%{k}%", v)
+        return text
+    
+
+    def sudo_write(self, filepath, data, mode='w'):
+        """ Write a file to a protected location
+        """
+        filename = self.tempfile()
+        with open(filename, mode) as fh:
+            fh.write(data)
+        self.shell(f"sudo mv {filename} {filepath}")
 
 
-    def path(self, path=''):
+    def tempfile(self, dir_abspath=None) -> str:
+        """ Create a temp file.
+
+        If dir is specified, makes the temp file in that directory
+        If text is set to False, 
+        """
+        if dir_abspath:
+            self.makedirs(dir_abspath)
+        _, name = tempfile.mkstemp(dir=dir_abspath)
+        return name
+
+
+    def localpath(self, path='') -> pathlib.Path:
         """ Resolve a path starting in the same directory as current script
         """
         return self._topfile / path
@@ -51,7 +93,7 @@ class PySh:
         return shlex.join(tokens)
 
 
-    def process(self, command, text=False) -> tuple[int, str, str]:
+    def process(self, command, text=False) -> tuple[int, str|bytes, str|bytes]:
         """ Execute a single command subprocess, return the status, stdout and stderr.
 
         Piping is not allowed.
@@ -71,10 +113,12 @@ class PySh:
         return p.returncode, so, se
 
 
-    def shell(self, command) -> None:
+    def shell(self, command) -> int:
         """ Run a shell command. Piping is allowed. Output is not captured.
+
+        Returns the command's exit-code
         """
-        os.system(command, shell=True)
+        return os.system(command)
 
 
 class UserPysh:
@@ -88,9 +132,11 @@ class UserPysh:
 
     def confirm(self, prompt) -> bool:
         """ Ask a user for a yes/no response as 'y' or 'yes'
-        Return True if y/yes , False otherwise
+        Return True if y/yes , False if n/no, or ask again if neither.
         """
-        res = self.ask(prompt)
+        res = ""
+        while res.lower() not in ["y", "yes", "no", "n"]:
+            res = self.ask(prompt)
         return res.lower() in ["yes", "y"]
 
 
@@ -108,21 +154,22 @@ class UserPysh:
 
         res = self.ask(prompt)
         res = int(res)
-        if 0 < res and res <= len(res):
+        if 0 < res and res <= len(options):
             return options[res-1]
         else:
             raise ValueError("Out of range")
 
 
-    def name(self) -> str:
+    def name(self) -> str|None:
         """ Return the current user name
         """
         return os.getenv("USERNAME")
 
+
     def uid(self) -> int:
         """ Return the current user ID
         """
-        return int(os.getenv("UID"))
+        return int(os.getenv("UID", -1))
 
 
     def os(self) -> tuple[str,str]:
