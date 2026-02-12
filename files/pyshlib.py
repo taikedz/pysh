@@ -1,23 +1,49 @@
-from genericpath import isfile
+# (C) 2026 TaiKedz
+# Conveyed to you under the terms of the MIT License. See LICENSE.txt or
+# https://mit-license.org/ . Essentially: do what you want with it, but
+# please do retain this copyright notice.
+
+from datetime import datetime
+import hashlib
 import os
 import platform
+import re
 import sys
 import shlex
 import subprocess
 import argparse
 import pathlib
 import tempfile
+import time
 
-""" Convenience suite for system scripting in python
+""" Convenience suite for system scripting in python.
+Add a single-import and use functions with helpful defaults.
 
 Import this library to gain fast access to common desired functionality.
+
+Provided as a single sidecar file for your convenience.
+
+Usage:
+
+    import pyshlib
+    pysh = pyshlib.PySh(__file__)
+
+    def main():
+        ''' Use pysh now. You have access to arg parsing helpers,
+        file-location utilties, system and user info, and more.
+        '''
+
+    # Wrap your main to suppress stack traces by default ;
+    #   user can enable them by setting env `PY_ERRORS=true`
+    pysh.main_wrap(main)
+
 """
 
 def main_wrap(_func):
     try:
         _func()
     except (KeyboardInterrupt,Exception) as e:
-        if os.getenv("PY_TRACEBACK", "false").lower() == "true":
+        if os.getenv("PY_ERRORS", "false").lower() == "true":
             raise
         else:
             print(e)
@@ -25,69 +51,14 @@ def main_wrap(_func):
 
 
 class PySh:
-    # Passthroughs
-    Path = pathlib.Path
-    isdir = os.path.isdir
-    isfile = os.path.isfile
-    remove = os.remove
 
     def __init__(self, topfile):
-        self._topfile = pathlib.Path(topfile)
-        self._topdir = self._topfile.parent
         self.args = ArgumentParserPysh()
         self.user = UserPysh()
+        self.fs = FileSystemPysh(topfile)
+        self.util = UtilPysh()
 
 
-    def makedirs(self, path):
-        """ Make directories down specified path, no error if they already exist
-        """
-        os.makedirs(path, exist_ok=True)
-
-
-    def open_replacing(self, filepath, substitutions:dict[str,str]) -> str:
-        """
-        Open filepath, and replace any key with corresponding value.
-
-        A substition dict `{'KEY': 'value'}` will replace any instances of `%KEY%` in the file
-        with literal `value`.
-
-        :param filepath: ASCII file path to open
-        :param substitutions: key-value substitutions
-        """
-        with open(filepath) as fh:
-            text = ''.join(fh.readlines())
-        for k,v in substitutions.items():
-            text = text.replace(f"%{k}%", v)
-        return text
-    
-
-    def sudo_write(self, filepath, data, mode='w'):
-        """ Write a file to a protected location
-        """
-        filename = self.tempfile()
-        with open(filename, mode) as fh:
-            fh.write(data)
-        self.shell(f"sudo mv {filename} {filepath}")
-
-
-    def tempfile(self, dir_abspath=None) -> str:
-        """ Create a temp file.
-
-        If dir is specified, makes the temp file in that directory
-        If text is set to False, 
-        """
-        if dir_abspath:
-            self.makedirs(dir_abspath)
-        _, name = tempfile.mkstemp(dir=dir_abspath)
-        return name
-
-
-    def localpath(self, path='') -> pathlib.Path:
-        """ Resolve a path starting in the same directory as current script
-        """
-        return self._topfile / path
-
-    
     def env(self, name, defval=None):
         """ Get an environment variable
         """
@@ -143,6 +114,120 @@ class PySh:
 
         else:
             raise RuntimeError(f"Unknown system type: {plat}")
+
+
+# class LogPysh:
+#     def __init__(self, level="warn", file_level="info"):
+#         """ TODO - set up with a useful date-time format
+#         Logs go to both terminal and to file ; if corresponding level is `None`, that channel is suppressed at runtime
+#         Also provide a `fail()` which logs a fatal and exits with custom status code
+
+#         Ensure logging level can be changed during runtime - or re-created
+#         """
+
+
+class UtilPysh:
+    def date(self, spec:str|None=None) -> datetime:
+        """ Produce a datetime object. If `spec` is specified, produce an object based on that date-time.
+        Else, produce the current date and time object.
+
+        Datetime objects can be compared and subtracted, for effectual temporal math.
+
+        e.g.
+            old = PYSH.date()
+            PYSH.sleep(1)
+            new = PYSH.date()
+            assert (new - old).total_seconds() > 0
+            assert (old - new).total_seconds() < 0
+        """
+        if spec:
+            assert re.match(r"^\d{4}-\d{2}-\d{2}(T| )\d{2}:\d{2}:\d{2}(\.\d+)?$", spec), (
+                f"Invalid date+time spec: {repr(spec)} ."
+                " Specify time as 'YYYY-MM-DD hh:mm:ss[.msec]'"
+            )
+            return datetime.fromisoformat(spec)
+        else:
+            return datetime.now()
+
+
+    def hash(self, hashalgo=hashlib.sha1, data:bytes|None=None):
+        """ Produce a hash of supplied data. If data is literal `None`, then a basic hash based on system time is produced.
+
+        Default hash is sha1. Find other has functions from `hashlib` in the Python standard library.
+        """
+        hashobj = hashalgo()
+        if data is None:
+            data = bytes(self.date().isoformat(), 'utf-8')
+        hashobj.update(data)
+        return hashobj.hexdigest()
+
+
+    def sleep(self, duration):
+        """ Sleep for the given duration, in seconds
+        """
+        time.sleep(duration)
+
+
+class FileSystemPysh:
+    # Passthroughs
+    Path = pathlib.Path
+    isdir = os.path.isdir
+    isfile = os.path.isfile
+    remove = os.remove
+
+    def __init__(self, topfile):
+        self._topfile = pathlib.Path(topfile)
+        self._topdir = self._topfile.parent
+
+
+    def tempfile(self, dir_abspath=None) -> str:
+        """ Create a temp file.
+
+        If dir is specified, makes the temp file in that directory
+        If text is set to False,
+        """
+        if dir_abspath:
+            self.makedirs(dir_abspath)
+        _, name = tempfile.mkstemp(dir=dir_abspath)
+        return name
+
+
+    def localpath(self, path='') -> pathlib.Path:
+        """ Resolve a path starting in the same directory as current script
+        """
+        return self._topfile / path
+
+
+    def makedirs(self, path):
+        """ Make directories down specified path, no error if they already exist
+        """
+        os.makedirs(path, exist_ok=True)
+
+
+    def open_replacing(self, filepath, substitutions:dict[str,str]) -> str:
+        """
+        Open filepath, and replace any key with corresponding value.
+
+        A substition dict `{'KEY': 'value'}` will replace any instances of `%KEY%` in the file
+        with literal `value`.
+
+        :param filepath: ASCII file path to open
+        :param substitutions: key-value substitutions
+        """
+        with open(filepath) as fh:
+            text = ''.join(fh.readlines())
+        for k,v in substitutions.items():
+            text = text.replace(f"%{k}%", v)
+        return text
+
+
+    def sudo_write(self, filepath, data, mode='w'):
+        """ Write a file to a protected location
+        """
+        filename = self.tempfile()
+        with open(filename, mode) as fh:
+            fh.write(data)
+        os.system(f"sudo mv {filename} {filepath}")
 
 
 class UserPysh:

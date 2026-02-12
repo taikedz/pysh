@@ -6,6 +6,12 @@ Rather than write a lot of complicated shell scripting with its weird argument p
 
 PySh provides common system scripting utilities in a single object for your convenience, with user interaction utilities, script path resolution, and more.
 
+Can be used, for example, for install scripts, setup utilities, and more.
+
+* Provides quick-usage argument definitions with minimal boilerplate
+* Provides easy access to files that reside with the script file, independent of what the current working directory is.
+* Provides a logging utility with sane default conifugration
+
 ## Usage
 
 Install it
@@ -50,7 +56,7 @@ Scripts that rely on a series of `sudo` calls may cause each one to require a pa
 Edit your `main()` function in your main file. You can add succinct argument parsing, access OS information, and more, without tons of imports.
 
 ```python
-PYSH = pysh.PySh(__file__)
+PYSH = pyshlib.PySh(__file__)
 
 def main():
     PYSH.args.positionals("+") # at least one positional argument.

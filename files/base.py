@@ -1,6 +1,6 @@
-import pysh
+import files.pyshlib as pyshlib
 
-PYSH = pysh.PySh(__file__)
+PYSH = pyshlib.PySh(__file__)
 
 def main():
     "your scripting here."
@@ -9,5 +9,5 @@ def main():
 # Do not remove - this calls your main() function for you
 #
 # Stack traces are suppressed for user convenience.
-# Set PY_TRACEBACK=true in your environment to print them.
-pysh.main_wrap(main)
+# Set PY_ERRORS=true in your environment to print them.
+pyshlib.main_wrap(main)
