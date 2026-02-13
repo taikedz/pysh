@@ -303,14 +303,17 @@ class ArgumentParserPysh:
         """ Add named positional arguments, or keywords stating `rest="(name)", nargs='+'` -- or '*' or '?'
         """
         assert not self._positionals_locked, "INTENRAL FATAL: Positional args can no longer be added."
+
+        for name in names:
+            self._parser.add_argument(name)
+
         if pos_name := special.get("rest", ""):
             pos_nargs = special.get("nargs", "")
             assert re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', pos_name), f"Supply a valid name for positional args"
             assert pos_nargs in ["+", "*", "?"], f"Invalid nargs - use '+' or '*' or '?'"
             self._parser.add_argument(pos_name, nargs=pos_nargs)
-
-        for name in names:
-            self._parser.add_argument(name)
+            if pos_nargs in ["+", "*"]:
+                self._positionals_locked = True
 
 
     def flags(self, *flags):
