@@ -4,7 +4,9 @@
 # please do retain this copyright notice.
 
 from datetime import datetime
+import glob
 import hashlib
+import logging
 import os
 import platform
 import re
@@ -52,11 +54,19 @@ def main_wrap(_func):
 
 class PySh:
 
-    def __init__(self, topfile):
+    def __init__(self, topfile:str, logfile:str|None=None):
+        """ Create a new PySh assistant.
+
+        For a custom log file behaviour, leave `logfile=None` here, and use `set_log()` with a custom `pyshlib.LogPysh(...)` object.
+
+        topfile : Path to your current script - typically, just pass in your script's `__file__` object
+        logfile : Path to a log file. Use this to create a log file at the named path with  defaults.
+        """
         self.args = ArgumentParserPysh()
         self.user = UserPysh()
         self.fs = FileSystemPysh(topfile)
         self.util = UtilPysh()
+        self.log = LogPysh(files=[logfile])
 
 
     def env(self, name, defval=None):
@@ -100,7 +110,9 @@ class PySh:
 
 
     def os_info(self) -> tuple[str,str,str]:
-        """ Return the operating system name and version as of /etc/hosts (Linux and Unix only)
+        """ Return the platform, operating system name and version as of /etc/hosts (Linux and Unix only)
+
+        E.g. ("Linux", "Ubuntu", "24.04") or ("Windows", "Enterprise", "11")
         """
         plat = platform.system().lower()
         if os.path.isfile("/etc/os-release"):
@@ -114,16 +126,44 @@ class PySh:
 
         else:
             raise RuntimeError(f"Unknown system type: {plat}")
+        
+
+    def set_log(self, logobj:'LogPysh'):
+        """ Set a new logging object with customizations.
+        """
+        self.log = logobj
 
 
-# class LogPysh:
-#     def __init__(self, level="warn", file_level="info"):
-#         """ TODO - set up with a useful date-time format
-#         Logs go to both terminal and to file ; if corresponding level is `None`, that channel is suppressed at runtime
-#         Also provide a `fail()` which logs a fatal and exits with custom status code
+class LogLevel:
+    ERROR = logging.ERROR
+    WARN = logging.WARN
+    INFO = logging.INFO
+    DEBUG = logging.DEBUG
 
-#         Ensure logging level can be changed during runtime - or re-created
-#         """
+
+class LogPysh(logging.Logger):
+    FORMAT_STRING = '%(asctime)s | %(levelname)s | %(name)s : %(message)s'
+
+    def __init__(self, name="main", fmt_string=FORMAT_STRING, level=LogLevel.WARN, console=True, files=None, file_level=LogLevel.DEBUG):
+        logging.Logger.__init__(self, name, LogLevel.DEBUG)
+        formatter_obj = logging.Formatter(fmt_string)
+
+        if files is None:
+            files = []
+        elif isinstance(files, str):
+            files = [files]
+
+        def _add_stream(handler:logging.Handler, local_level, **kwargs):
+            handler = handler(**kwargs)
+            handler.setLevel(local_level)
+            handler.setFormatter(formatter_obj)
+            self.addHandler(handler)
+
+        if console is True:
+            _add_stream(logging.StreamHandler, local_level=level, stream=sys.stdout)
+
+        for filepath in files:
+            _add_stream(logging.FileHandler, file_level, filename=filepath)
 
 
 class UtilPysh:
@@ -174,6 +214,7 @@ class FileSystemPysh:
     isdir = os.path.isdir
     isfile = os.path.isfile
     remove = os.remove
+    glob = glob.glob
 
     def __init__(self, topfile):
         self._topfile = pathlib.Path(topfile)
@@ -196,6 +237,13 @@ class FileSystemPysh:
         """ Resolve a path starting in the same directory as current script
         """
         return self._topfile / path
+    
+
+    def expandpath(self, path) -> str:
+        """ Expand the user component of a path
+        """
+        # TODO - also subtitute env vars
+        return os.path.expanduser(path)
 
 
     def makedirs(self, path):
@@ -228,6 +276,7 @@ class FileSystemPysh:
         with open(filename, mode) as fh:
             fh.write(data)
         os.system(f"sudo mv {filename} {filepath}")
+
 
 
 class UserPysh:

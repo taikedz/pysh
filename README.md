@@ -1,6 +1,8 @@
 # Py/Sh - Use python instead of shell
 
-Script to just set up a python replacement for shell scripting with the nice-to-haves
+Mini-library to just set up a python replacement for shell scripting with the nice-to-haves
+
+## Motivation
 
 Rather than write a lot of complicated shell scripting with its weird argument pass-arounds and global variables, lack of rich types, exception-based error handling, and all that, simply use python.
 
@@ -9,8 +11,11 @@ PySh provides common system scripting utilities in a single object for your conv
 Can be used, for example, for install scripts, setup utilities, and more.
 
 * Provides quick-usage argument definitions with minimal boilerplate
-* Provides easy access to files that reside with the script file, independent of what the current working directory is.
-* Provides a logging utility with sane default conifugration
+* Provides a logging utility with out-of-the-box date and time stamps, and optional file
+* No-boilerplate access to shell calls (no capture) and commands (capturing output)
+* Provides easy access to files that reside with the script file, independent of what the current working directory is
+    * this is geared towards deployment/installation helper scripts
+* Fast access to commonly useful utilites in a single namespace on `PYSH.fs.*` such as `glob()`, `isdir`/`isfile` checking, and others
 
 ## Usage
 
@@ -20,18 +25,18 @@ Install it
 ./install.sh
 ```
 
-Use it anywPYSH
+Use it anywhere
 
 ```sh
-# Create project, add assets and executable
-pysh path/to/name-of-file.py
+# Create a new project, add assets and executable
+pysh ./name-of-file.py
 ```
 
 Run the resulting project
 
 ```sh
 # Load venv etc, run script
-path/to/name-of-file.py.sh arg1 arg2 ...
+./name-of-file.py.sh arg1 arg2 ...
 ```
 
 Using python instead of raw shell scripting is now a .... piece o' pysh. (_unapologetic_)
@@ -55,25 +60,58 @@ Scripts that rely on a series of `sudo` calls may cause each one to require a pa
 
 Edit your `main()` function in your main file. You can add succinct argument parsing, access OS information, and more, without tons of imports.
 
+Here's an example of a fictitious installer script. It takes arguments, uses logging, resolves files next to the installer script, and has a verbose mode, all setup within the first few lines and a single import.
+
 ```python
-PYSH = pyshlib.PySh(__file__)
+# Set a custom log name (set to None for no actual log file)
+logname = "my-tools-installation.log"
+PYSH = pyshlib.PySh(__file__, logname)
 
 def main():
-    PYSH.args.positionals("+") # at least one positional argument.
-    PYSH.args.flags("verbose", "unsafe") # specify boolean flags "--verbose" and "--unsafe"
-    PYSH.args.options(host="server1", user="me", port=22) # specify "--tower" option with default value "server1", etc
+    # Quickly define some arguments and parse them
+    PYSH.args.flags("--verbose", "--web") # bools
+    PYSH.args.options("--bindir", "~/.local/bin")
+    PYSH.args.positionals(rest="cmds", nargs="*")
     args = PYSH.args.parse()
 
-    assert PYSH.user.confirm("Are you sure?"), "Abort" # automatically exits with status 1 if not "yes" or "y"
+    if args.verbose:
+        # Set a custom log that will display the minutiae
+        PYSH.set_log(pyshlib.LogPysh(
+            files=logname,
+            level=pyshlib.LogLevel.DEBUG,
+            file_level=pyshlib.LogLevel.DEBUG
+            ))
 
-    status, stdout, stderr = PYSH.cmd(
-        ["ssh", "-p", str(args.port), f"{args.user}@{args.host}"] + PYSH.shjoin(args.positionals),
-        text=True
-        )
+    if args.cmds:
+        # Path expansions
+        bindest = PYSH.expandpath(args.bindir)
 
-    assert status == 0, f"Could not run remote command:\n{stderr}"
-    print(stdout)
+        mandatory = PYSH.fs.glob(PYSH.fs.localpath()+"/main-bins/*")
+        install_these = mandatory + args.cmds
 
-    PYSH.shell("sha1sum /etc/hosts|cut -f1") # `shell()` allows piped command chains
+        PYSH.log.debug(f"Into {bindest}/ :")
+
+        for item in install_these:
+            # copy from installer's location to deployment location
+            localfile = PYSH.localpath(item)
+            PYSH.log.debug(f"    Installing {localfile}")
+
+            PYSH.shell(f"cp {localfile} {bindest}/")
+
+    if args.web:
+        if osname := PYSH.os_info()[1] in ["Ubuntu", "Debian"]:
+            command = "sudo apt-get install apache2"
+
+        elif osname in ["Red Hat", "Fedora"]:
+            command = "sudo dnf install httpd"
+        else:
+            PYSH.log.error("Unsupported OS")
+            exit(1)
+
+        print("Installing web server")
+        status, stdout, stderr = PYSH.cmd(command)
+        # If not success, bails with the output, else, runs silent
+        assert status == 0, stderr
+        print("Web server successsfully installed")
 ```
 
