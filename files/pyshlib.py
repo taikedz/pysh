@@ -287,10 +287,10 @@ class ArgumentParserPysh:
         self._positionals_locked = False
 
 
-    def parse(self):
+    def parse(self, argv:list[str]|None=None):
         """ Parse arguments as currently defined
         """
-        return self._parser.parse_args()
+        return self._parser.parse_args(argv)
 
 
     def add_argument(self, *a, **k):
