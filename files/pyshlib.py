@@ -10,6 +10,7 @@ import logging
 import os
 import platform
 import re
+import shutil
 import sys
 import shlex
 import subprocess
@@ -211,8 +212,10 @@ class UtilPysh:
 class FileSystemPysh:
     # Passthroughs
     Path = pathlib.Path
+    exists = os.path.exists
     isdir = os.path.isdir
     isfile = os.path.isfile
+    islink = os.path.islink
     remove = os.remove
     glob = glob.glob
 
@@ -231,6 +234,16 @@ class FileSystemPysh:
             self.makedirs(dir_abspath)
         _, name = tempfile.mkstemp(dir=dir_abspath)
         return name
+
+
+    def cp(self, src, dst):
+        os.makedirs(pathlib.Path(dst).parent, exist_ok=True)
+        shutil.copy(src, dst)
+
+
+    def mv(self, src, dst):
+        os.makedirs(pathlib.Path(dst).parent, exist_ok=True)
+        shutil.move(src, dst)
 
 
     def localpath(self, path='') -> pathlib.Path:
@@ -374,7 +387,7 @@ class ArgumentParserPysh:
                     flag = f"-{flag}"
                 else:
                     flag = f"--{flag}"
-            self._parser.add_argument(flag, action="store_true")
+            self._parser.add_argument(flag.replace("_", "-"), action="store_true")
 
 
     def options(self, **opts):
