@@ -1,3 +1,11 @@
+#!/usr/bin/env python3
+
+""" Example usage of pyshlib
+
+Implements the `pysh` script as a python script.
+Also implements additional options which would have been harder to do nicely in bash
+"""
+
 from files import pyshlib
 
 PYSH = pyshlib.PySh(__file__)
@@ -26,6 +34,12 @@ def main():
     if args.venv:
         prep_venv(target.parent, args.venv_name, args.requirements)
 
+        targetsh = f"{target}.sh"
+        if not PYSH.fs.isfile(targetsh):
+            data = PYSH.fs.open_replacing(PYSH.fs.localpath("files/run.sh"), {"TARGET": str(target)})
+            with open(targetsh, 'w') as fh:
+                fh.write(data)
+            PYSH.shell(f"chmod 755 {targetsh}")
 
 
 def prep_venv(target_dir, venv_name, req_file):
@@ -39,8 +53,7 @@ def prep_venv(target_dir, venv_name, req_file):
         """)
     else:
         PYSH.log.warning(f"Could not find {repr(req_file)}")
-        /
 
-
-
+# Wrap the main function so that stacktraces are suppressed
+# Nicer for the user. Can be overridden withby setting `PY_ERRORS=true`
 pyshlib.main_wrap(main)
