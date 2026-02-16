@@ -71,6 +71,7 @@ class PySh:
         self.fs = FileSystemPysh(topfile)
         self.util = UtilPysh()
         self.log = LogPysh(files=logfile)
+        self.scriptname = pathlib.Path(topfile).name
 
 
     def env(self, name, defval=None):
@@ -85,7 +86,7 @@ class PySh:
         return shlex.join(tokens)
 
 
-    def cmd(self, command, text=False) -> tuple[int, str|bytes, str|bytes]:
+    def cmd(self, command, text=True) -> tuple[int, str|bytes, str|bytes]:
         """ Execute a single command subprocess, return the status, stdout and stderr.
 
         Piping is not allowed.
@@ -310,7 +311,7 @@ class UserPysh:
         """
         res = ""
         while res.lower() not in ["y", "yes", "no", "n"]:
-            res = self.ask(prompt)
+            res = self.ask(f"{prompt} y/N> ")
         return res.lower() in ["yes", "y"]
 
 
@@ -347,8 +348,8 @@ class UserPysh:
 
 
 class ArgumentParserPysh:
-    def __init__(self):
-        self._parser = argparse.ArgumentParser()
+    def __init__(self, command_leadup=None, **k):
+        self._parser = argparse.ArgumentParser(command_leadup, **k)
         self._positionals_locked = False
 
 
