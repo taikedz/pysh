@@ -19,6 +19,9 @@ import pathlib
 import tempfile
 import time
 
+# Current version - a series of numbers, optionally 'dev' at the end if not-released
+PYSH_VERSION=(0,2,3, 'dev')
+
 """ Convenience suite for system scripting in python.
 Add a single-import and use functions with helpful defaults.
 
