@@ -67,7 +67,7 @@ class PySh:
         self.user = UserPysh()
         self.fs = FileSystemPysh(topfile)
         self.util = UtilPysh()
-        self.log = LogPysh(files=[logfile])
+        self.log = LogPysh(files=logfile)
 
 
     def env(self, name, defval=None):
