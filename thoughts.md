@@ -10,6 +10,7 @@
     * PyshArgs (for the short-handed argument parser)
     * PyshShell (shell and subprocess access)
     * User (user interactions, querying, etc)
+    * ColorPrinter (adds colour, respects `NO_COLOR`, includes prettyprint)
 
 ## Example usage
 
