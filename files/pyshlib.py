@@ -366,12 +366,22 @@ class ArgumentParserPysh:
 
 
     def positionals(self, *names, **special):
-        """ Add named positional arguments, or keywords stating `rest="(name)", nargs='+'` -- or '*' or '?'
+        """ Add named positional arguments
+
+        For positional arguments with a value list, this constrains the choices
+        
+        or keywords stating `rest="(name)", nargs='+'` -- or '*' or '?'
         """
         assert not self._positionals_locked, "INTENRAL FATAL: Positional args can no longer be added."
 
         for name in names:
             self._parser.add_argument(name)
+
+        for k,v in special.items():
+            if k in ["nargs", "rest"]:
+                continue
+            assert isinstance(v, list), f"Positional {repr(k)} must take a list of choices, not {repr(v)}"
+            self._parser.add_argument(k, choices=v)
 
         if pos_name := special.get("rest", ""):
             pos_nargs = special.get("nargs", "")
@@ -380,6 +390,7 @@ class ArgumentParserPysh:
             self._parser.add_argument(pos_name, nargs=pos_nargs)
             if pos_nargs in ["+", "*"]:
                 self._positionals_locked = True
+                return
 
 
     def flags(self, *flags):
@@ -396,6 +407,8 @@ class ArgumentParserPysh:
 
     def options(self, **opts):
         """ Add options with default values
+
+        If the default values is a list, this indicates a set of fixed choices, and teh default value will be the first.
         """
         for flag, defval in opts.items():
             if not flag.startswith("--"):
@@ -403,5 +416,9 @@ class ArgumentParserPysh:
                     flag = f"-{flag}"
                 else:
                     flag = f"--{flag}"
-            self._parser.add_argument(flag, default=defval, type=type(defval))
+
+            if isinstance(defval, list):
+                self._parser.add_argument(flag, default=defval[0], choices=defval)
+            else:
+                self._parser.add_argument(flag, default=defval, type=type(defval))
 
