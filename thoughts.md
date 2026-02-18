@@ -6,23 +6,23 @@
         * (templating)
         * don't try to provide all manner of utilities passthrus
     * Files (templating, )
-    * PyshLog (for the sane logger)
-    * PyshArgs (for the short-handed argument parser)
-    * PyshShell (shell and subprocess access)
+    * Log (for the sane logger)
+    * Args (for the short-handed argument parser)
+    * Shell (shell and subprocess access)
     * User (user interactions, querying, etc)
-    * ColorPrinter (adds colour, respects `NO_COLOR`, includes prettyprint)
+    * Fprint (adds colour, respects `NO_COLOR`, includes prettyprint)
 
 ## Example usage
 
 ```python
 import pyshlib
 
-filesys = pyshlib.Files(__file__)
-log = pyshlib.PyshLog()
-parser = pyshlib.PyshArgs()
+FS = pyshlib.Files(__file__)
+LOG = pyshlib.Log()
 
 def main():
-    parser.positionals("command", rest="subcommand", nargs="*")
+    parser = pyshlib.Args()
+    parser.positionals(command=["start", "stop", "logs"], rest="subcommand", nargs="*")
     parser.flags("--verbose")
     parser.options(reqs_file="", venv_name="")
     args = parser.parse()
@@ -34,17 +34,23 @@ def main():
 
     match command:
     case "start":
-        return shell.shell("./bin/service start")
+        LOG.info("Start service")
+        cmd = "./bin/service start"
+        LOG.debug(cmd)
+        return shell.shell(cmd)
 
     case "stop":
-        return shell.shell("./bin/service stop")
+        LOG.info("Stop service")
+        cmd = "./bin/service stop"
+        LOG.debug(cmd)
+        return shell.shell(cmd)
 
     case "logs":
         status, stdout, stderr = shell.cmd(["./bin/service", "logs"])
         assert status > 0, f"FAIL\n{stderr}"
         comp = PyshCompare(args.subcommand)
         retained = [line for line in stdout.split("\n")
-            if (True if not args.subcommmand else are_any_of(args.subcomands, in_any_of=[line]) ) ]
+            if (True if not args.subcommmand else are_any_of(args.subcomand, in_any_of=[line]) ) ]
         print("\n---\n".join(retained))
 
 
