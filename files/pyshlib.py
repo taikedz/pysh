@@ -18,9 +18,10 @@ import argparse
 import pathlib
 import tempfile
 import time
+from typing import Any
 
 # Current version - a series of numbers, optionally 'dev' at the end if not-released
-PYSH_VERSION=(0,2,3, 'dev')
+PYSH_VERSION=(0,3,0, 'dev')
 
 """ Convenience suite for system scripting in python.
 Add a single-import and use functions with helpful defaults.
@@ -31,21 +32,10 @@ Provided as a single sidecar file for your convenience.
 
 Usage:
 
-    import pyshlib
-    pysh = pyshlib.PySh(__file__)
-
-    def main():
-        ''' Use pysh now. You have access to arg parsing helpers,
-        file-location utilties, system and user info, and more.
-        '''
-
-    # Wrap your main to suppress stack traces by default ;
-    #   user can enable them by setting env `PY_ERRORS=true`
-    pysh.main_wrap(main)
-
+### TBD
 """
 
-def main_wrap(_func):
+def Main(_func):
     try:
         _func()
     except (KeyboardInterrupt,Exception) as e:
@@ -68,7 +58,7 @@ class PySh:
         """
         self.args = ArgumentParserPysh()
         self.user = UserPysh()
-        self.fs = FileSystemPysh(topfile)
+        self.fs = FS(topfile)
         self.util = UtilPysh()
         self.log = LogPysh(files=logfile)
         self.scriptname = pathlib.Path(topfile).name
@@ -139,18 +129,18 @@ class PySh:
         self.log = logobj
 
 
-class LogLevel:
+class _LogBase(logging.Logger):
     ERROR = logging.ERROR
     WARN = logging.WARN
     INFO = logging.INFO
     DEBUG = logging.DEBUG
+    _FORMAT_STRING = '%(asctime)s | %(levelname)s | %(name)s : %(message)s'
 
 
-class LogPysh(logging.Logger):
-    FORMAT_STRING = '%(asctime)s | %(levelname)s | %(name)s : %(message)s'
+class Log(_LogBase):
 
-    def __init__(self, name="main", fmt_string=FORMAT_STRING, level=LogLevel.WARN, console=True, files=None, file_level=LogLevel.DEBUG):
-        logging.Logger.__init__(self, name, LogLevel.DEBUG)
+    def __init__(self, name="main", fmt_string=_LogBase._FORMAT_STRING, level=_LogBase.WARN, console=True, files=None, file_level=_LogBase.DEBUG):
+        logging.Logger.__init__(self, name, _LogBase.DEBUG)
         formatter_obj = logging.Formatter(fmt_string)
 
         if files is None:
@@ -207,22 +197,8 @@ class UtilPysh:
         return hashobj.hexdigest()
 
 
-    def sleep(self, duration):
-        """ Sleep for the given duration, in seconds
-        """
-        time.sleep(duration)
 
-
-class FileSystemPysh:
-    # Passthroughs
-    Path = pathlib.Path
-    exists = os.path.exists
-    isdir = os.path.isdir
-    isfile = os.path.isfile
-    islink = os.path.islink
-    remove = os.remove
-    glob = glob.glob
-
+class FS:
     def __init__(self, topfile):
         self._topfile = pathlib.Path(topfile)
         self._topdir = self._topfile.parent
@@ -240,33 +216,38 @@ class FileSystemPysh:
         return name
 
 
-    def cp(self, src, dst):
-        os.makedirs(pathlib.Path(dst).parent, exist_ok=True)
+    def cp(self, src, dst, mode=511):
+        """ Make parent directories, and copy a file to destination
+        """
+        os.makedirs(pathlib.Path(dst).parent, exist_ok=True, mode=mode)
         shutil.copy(src, dst)
 
 
-    def mv(self, src, dst):
-        os.makedirs(pathlib.Path(dst).parent, exist_ok=True)
+    def mv(self, src, dst, mode=511):
+        """ Make parent directories, and move a file to destination
+        """
+        os.makedirs(pathlib.Path(dst).parent, exist_ok=True, mode=mode)
         shutil.move(src, dst)
 
 
-    def localpath(self, path='') -> pathlib.Path:
+    def asset_path(self, path='') -> pathlib.Path:
         """ Resolve a path starting in the same directory as current script
         """
         return self._topfile / path
     
 
-    def expandpath(self, path) -> str:
+    def expand_path(self, path) -> str:
         """ Expand the user component of a path
-        """
-        # TODO - also subtitute env vars
-        return os.path.expanduser(path)
 
+        Use python formatting notation to substitute environment variables
+        e.g. the following lead to the same result
 
-    def makedirs(self, path):
-        """ Make directories down specified path, no error if they already exist
+            expand_path("~/Documents/{USER}")
+            expand_path("/home/{USER}/Documents/{USER}")
+            expand_path("{HOME}/Documents/{USER}")
         """
-        os.makedirs(path, exist_ok=True)
+        path = os.path.expanduser(path)
+        return path.format(os.environ)
 
 
     def open_replacing(self, filepath, substitutions:dict[str,str]) -> str:
@@ -281,8 +262,10 @@ class FileSystemPysh:
         """
         with open(filepath) as fh:
             text = ''.join(fh.readlines())
+
         for k,v in substitutions.items():
             text = text.replace(f"%{k}%", v)
+
         return text
 
 
@@ -296,7 +279,7 @@ class FileSystemPysh:
 
 
 
-class UserPysh:
+class User:
     def ask(self, prompt) -> str:
         """ Ask a user for input
         """
@@ -347,7 +330,7 @@ class UserPysh:
         return int(os.getenv("UID", -1))
 
 
-class ArgumentParserPysh:
+class ArgumentParser:
     def __init__(self, command_leadup=None, **k):
         self._parser = argparse.ArgumentParser(command_leadup, **k)
         self._positionals_locked = False
@@ -365,12 +348,15 @@ class ArgumentParserPysh:
         self._parser.add_argument(*a, **k)
 
 
-    def positionals(self, *names, **special):
+    def positionals(self, *names, **special:dict[str,str|dict|list]):
         """ Add named positional arguments
 
         For positional arguments with a value list, this constrains the choices
         
         or keywords stating `rest="(name)", nargs='+'` -- or '*' or '?'
+
+        e.g.
+            parser.positionals("arg1", "arg2", "arg3", maybeArg4={"nargs":"?"})
         """
         assert not self._positionals_locked, "INTENRAL FATAL: Positional args can no longer be added."
 
@@ -378,47 +364,44 @@ class ArgumentParserPysh:
             self._parser.add_argument(name)
 
         for k,v in special.items():
-            if k in ["nargs", "rest"]:
-                continue
-            assert isinstance(v, list), f"Positional {repr(k)} must take a list of choices, not {repr(v)}"
-            self._parser.add_argument(k, choices=v)
+            assert not self._positionals_locked, (
+                "No more positional values may be added "
+                "- you have previously used a capture-all "
+                "nargs value like '+' or '*'")
 
-        if pos_name := special.get("rest", ""):
-            pos_nargs = special.get("nargs", "")
-            assert re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', pos_name), f"Supply a valid name for positional args"
-            assert pos_nargs in ["+", "*", "?"], f"Invalid nargs - use '+' or '*' or '?'"
-            self._parser.add_argument(pos_name, nargs=pos_nargs)
-            if pos_nargs in ["+", "*"]:
-                self._positionals_locked = True
-                return
+            if isinstance(v, list):
+                self._parser.add_argument(k, choices=v)
+            elif isinstance(v, dict):
+                v:dict
+                self._parser.add_argument(k, **v)
+                if v.get("nargs") in ["*", "+"]:
+                    self._positionals_locked = True
+            elif isinstance(v,str):
+                self.add_argument(k, default=v)
+            else:
+                raise ValueError(f"Positional {repr(k)} must take a list of choices, not {repr(v)}")
 
 
-    def flags(self, *flags):
+    def flags(self, *flags:str):
         """ Add boolean flags. During runtime, unset flags are flase, set flags are true
         """
         for flag in flags:
-            if not flag.startswith("--"):
-                if flag.startswith("-"):
-                    flag = f"-{flag}"
-                else:
-                    flag = f"--{flag}"
-            self._parser.add_argument(flag.replace("_", "-"), action="store_true")
+            flag = f"--{flag.lstrip("-/")}" # force 2-dash convention
+            self._parser.add_argument(flag, action="store_true")
 
 
-    def options(self, **opts):
+    def options(self, **opts:dict[str,Any]):
         """ Add options with default values
 
-        If the default values is a list, this indicates a set of fixed choices, and teh default value will be the first.
-        """
-        for flag, defval in opts.items():
-            if not flag.startswith("--"):
-                if flag.startswith("-"):
-                    flag = f"-{flag}"
-                else:
-                    flag = f"--{flag}"
+        The default value is added as-is, with a type coercion of the same type as value, except in the case of a tuple
 
-            if isinstance(defval, list):
+        If the default value of an item is a tuple, this indicates a set of fixed choices, and the default value will be the first in the tuple.
+        """
+        defval:tuple|Any
+        for flag, defval in opts.items():
+            flag = f"--{flag.lstrip("-/")}" # force 2-dash convention
+
+            if isinstance(defval, tuple):
                 self._parser.add_argument(flag, default=defval[0], choices=defval)
             else:
                 self._parser.add_argument(flag, default=defval, type=type(defval))
-
