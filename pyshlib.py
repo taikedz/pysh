@@ -21,32 +21,41 @@ import time
 from typing import Any
 
 # Current version - a series of numbers, optionally 'dev' at the end if not-released
-PYSH_VERSION=(0,3,0, 'dev')
+PYSH_VERSION=(0,3,0,)
 
 """ Convenience suite for system scripting in python.
-Add a single-import and use functions with helpful defaults.
+Add a single-import and use classes/functions with helpful defaults.
 
 Import this library to gain fast access to common desired functionality.
 
 Provided as a single sidecar file for your convenience.
-
-Usage:
-
-### TBD
 """
 
-def Main(_func):
+def Main(_func, error_mask="PY_ERRORS"):
+    """Wrap your main function to suppress tracebacks (nicer for users)
+
+    Specify an error mask, e.g. `PY_ERRORS` - if `export PY_ERRORS=true` is set in environment,
+    then tracebacks are printed.
+
+    e.g.
+
+        def main():
+            ... # implementation here ...
+
+        if __name__ == "__main__":
+            pyshlib.Main(main)
+    """
     try:
         _func()
     except (KeyboardInterrupt,Exception) as e:
-        if os.getenv("PY_ERRORS", "false").lower() == "true":
+        if os.getenv(error_mask, "false").lower() == "true":
             raise
         else:
             print(e)
             exit(1)
 
 
-class PySh:
+class System:
 
     def __init__(self, topfile:str, logfile:str|None=None):
         """ Create a new PySh assistant.
@@ -56,11 +65,11 @@ class PySh:
         topfile : Path to your current script - typically, just pass in your script's `__file__` object
         logfile : Path to a log file. Use this to create a log file at the named path with  defaults.
         """
-        self.args = ArgumentParserPysh()
-        self.user = UserPysh()
-        self.fs = FS(topfile)
+        self.args = ArgumentParser()
+        self.user = User()
+        self.fs = Filesys(topfile)
         self.util = UtilPysh()
-        self.log = LogPysh(files=logfile)
+        self.log = Log(files=logfile)
         self.scriptname = pathlib.Path(topfile).name
 
 
@@ -121,12 +130,7 @@ class PySh:
 
         else:
             raise RuntimeError(f"Unknown system type: {plat}")
-        
 
-    def set_log(self, logobj:'LogPysh'):
-        """ Set a new logging object with customizations.
-        """
-        self.log = logobj
 
 
 class _LogBase(logging.Logger):
@@ -198,10 +202,12 @@ class UtilPysh:
 
 
 
-class FS:
-    def __init__(self, topfile):
-        self._topfile = pathlib.Path(topfile)
-        self._topdir = self._topfile.parent
+class Filesys:
+    def __init__(self, asset_root):
+        """Create a filesystem helper using `topfile` path as the root for assets
+        """
+        self._script = pathlib.Path(asset_root)
+        self._assetsdir = self._script.parent
 
 
     def tempfile(self, dir_abspath=None) -> str:
@@ -216,25 +222,25 @@ class FS:
         return name
 
 
-    def cp(self, src, dst, mode=511):
+    def cp(self, src, dst, dirmode=511):
         """ Make parent directories, and copy a file to destination
         """
-        os.makedirs(pathlib.Path(dst).parent, exist_ok=True, mode=mode)
+        os.makedirs(pathlib.Path(dst).parent, exist_ok=True, mode=dirmode)
         shutil.copy(src, dst)
 
 
-    def mv(self, src, dst, mode=511):
+    def mv(self, src, dst, dirmode=511):
         """ Make parent directories, and move a file to destination
         """
-        os.makedirs(pathlib.Path(dst).parent, exist_ok=True, mode=mode)
+        os.makedirs(pathlib.Path(dst).parent, exist_ok=True, mode=dirmode)
         shutil.move(src, dst)
 
 
     def asset_path(self, path='') -> pathlib.Path:
         """ Resolve a path starting in the same directory as current script
         """
-        return self._topfile / path
-    
+        return self._script / path
+
 
     def expand_path(self, path) -> str:
         """ Expand the user component of a path
@@ -278,14 +284,45 @@ class FS:
         os.system(f"sudo mv {filename} {filepath}")
 
 
+    def glob(self, pat) -> list[str]:
+        return glob.glob(pat)
+
+
+class Color:
+    def __init__(self):
+        noclr = os.getenv("NO_COLOR", "0") == "1"
+        colors = {
+            "RST":"0",
+            "RED":"31",
+            "GRN":"32",
+            "YELW":"33",
+            "BLUE":"34",
+            "MAUV":"35",
+            "TEAL":"36",
+        }
+        self._colors = {k:('' if noclr else f"\033[{v};1m") for k,v in colors.items()}
+
+    def clr(self, clr, txt):
+        if clr not in self._colors:
+            return txt
+        return f"{self._colors.get(clr)}{txt}{self._colors.get('RST')}"
+
+    def print(self, text, color):
+        print(self.clr(color, text))
+
 
 class User:
-    def ask(self, prompt) -> str:
+    """ Prompt user and display information. Uses Color class.
+    """
+    def read_user(self, prompt) -> str:
         """ Ask a user for input
         """
         print(prompt, end='', flush=True)
         res = sys.stdin.readline()
         return res.strip("\n")
+
+    def ask(self, prompt) -> str:
+        return self.read_user(Color().clr("BLUE", prompt))
 
 
     def confirm(self, prompt) -> bool:
@@ -294,7 +331,7 @@ class User:
         """
         res = ""
         while res.lower() not in ["y", "yes", "no", "n"]:
-            res = self.ask(f"{prompt} y/N> ")
+            res = self.read_user(f"{Color().clr("TEAL", prompt)} y/N> ")
         return res.lower() in ["yes", "y"]
 
 
@@ -310,7 +347,7 @@ class User:
             print(f"  {i}: {item}")
             i+=1
 
-        res = self.ask(prompt)
+        res = self.read_user(Color().clr("TEAL", prompt))
         res = int(res)
         if 0 < res and res <= len(options):
             return options[res-1]
@@ -329,17 +366,61 @@ class User:
         """
         return int(os.getenv("UID", -1))
 
+class LineHandler:
+    def __init__(self, data:str|list[str]):
+        if isinstance(data, str):
+            data = data.split("\n")
+        self._data:list[str] = data
+
+    def match(self, pattern, regex=False, group:int|None=None) -> 'LineHandler':
+        if regex:
+            if group is None:
+                extract = lambda m,s: s
+            else:
+                extract = lambda m,s: m.group(group)
+            pat = re.compile(pattern)
+            return LineHandler([line for line in self._data if extract(re.match(pat, line), line)])
+        else:
+            return LineHandler([line for line in self._data if pattern in line])
+
+    def exclude(self, pattern, regex=False) -> 'LineHandler':
+        if regex:
+            pat = re.compile(pattern)
+            return LineHandler([line for line in self._data if re.match(pat, line) is None])
+        else:
+            return LineHandler([line for line in self._data if pattern not in line])
+
+    def replace(self, target, replacement, regex=False) -> 'LineHandler':
+        if regex:
+            pat = re.compile(target)
+            return LineHandler([re.sub(pat, replacement, line) for line in self._data])
+        else:
+            return LineHandler([line.replace(target, replacement) for line in self._data])
 
 class ArgumentParser:
+    """
+    A quick-spec argument parser.
+
+        parser = pysh.ArgumentParser("cmd prefix tokens")
+        parser.positionals("arg1", "arg2", "arg3")
+        args = parser.parse()
+        print(args.arg2)
+    """
     def __init__(self, command_leadup=None, **k):
         self._parser = argparse.ArgumentParser(command_leadup, **k)
-        self._positionals_locked = False
 
 
-    def parse(self, argv:list[str]|None=None):
+    def parse(self, argv):
         """ Parse arguments as currently defined
         """
+        assert argv is not None, f"Use parse parse_argv() to parse top-level command line arguments"
         return self._parser.parse_args(argv)
+
+
+    def parse_argv(self):
+        """ Parse system command line arguments
+        """
+        return self._parser.parse_args()
 
 
     def add_argument(self, *a, **k):
@@ -348,42 +429,30 @@ class ArgumentParser:
         self._parser.add_argument(*a, **k)
 
 
-    def positionals(self, *names, **special:dict[str,str|dict|list]):
+    def args(self, *names, **special:dict[str,list[str]]):
         """ Add named positional arguments
 
-        For positional arguments with a value list, this constrains the choices
-        
-        or keywords stating `rest="(name)", nargs='+'` -- or '*' or '?'
-
-        e.g.
-            parser.positionals("arg1", "arg2", "arg3", maybeArg4={"nargs":"?"})
+        For positional arguments with a value list, this constrains the discrete available choices
         """
-        assert not self._positionals_locked, "INTENRAL FATAL: Positional args can no longer be added."
-
         for name in names:
             self._parser.add_argument(name)
 
         for k,v in special.items():
-            assert not self._positionals_locked, (
-                "No more positional values may be added "
-                "- you have previously used a capture-all "
-                "nargs value like '+' or '*'")
-
             if isinstance(v, list):
                 self._parser.add_argument(k, choices=v)
-            elif isinstance(v, dict):
-                v:dict
-                self._parser.add_argument(k, **v)
-                if v.get("nargs") in ["*", "+"]:
-                    self._positionals_locked = True
-            elif isinstance(v,str):
-                self.add_argument(k, default=v)
             else:
                 raise ValueError(f"Positional {repr(k)} must take a list of choices, not {repr(v)}")
 
+    def moreargs(self, name, nargs="+", help="Target items"):
+        """ Declare existence of more optional arguments.
+
+        Use `nargs="+"` to specify one or more ; use `nargs="*"` to specify zero or more
+        """
+        self.add_argument(name, nargs=nargs, help=help)
+
 
     def flags(self, *flags:str):
-        """ Add boolean flags. During runtime, unset flags are flase, set flags are true
+        """ Add boolean flags. During runtime, unset flags are false, set flags are true
         """
         for flag in flags:
             flag = f"--{flag.lstrip("-/")}" # force 2-dash convention
@@ -402,6 +471,28 @@ class ArgumentParser:
             flag = f"--{flag.lstrip("-/")}" # force 2-dash convention
 
             if isinstance(defval, tuple):
-                self._parser.add_argument(flag, default=defval[0], choices=defval)
+                self._parser.add_argument(flag, default=defval[0], choices=defval, type=type(defval[0]))
             else:
                 self._parser.add_argument(flag, default=defval, type=type(defval))
+
+
+
+class Time:
+
+    def __init__(self, dtspec=None):
+        if dtspec is None:
+            self._thetime = datetime.now()
+        else:
+            self._thetime = datetime.fromisoformat(dtspec)
+
+
+    def sleep(self, duration):
+        time.sleep(duration)
+
+
+    def date(self):
+        return self._thetime
+
+
+    def seconds_since(self, date:datetime):
+        return (self._thetime - date).total_seconds()
