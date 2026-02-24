@@ -56,23 +56,6 @@ def Main(_func, error_mask="PY_ERRORS"):
 
 
 class System:
-
-    def __init__(self, topfile:str, logfile:str|None=None):
-        """ Create a new PySh assistant.
-
-        For a custom log file behaviour, leave `logfile=None` here, and use `set_log()` with a custom `pyshlib.LogPysh(...)` object.
-
-        topfile : Path to your current script - typically, just pass in your script's `__file__` object
-        logfile : Path to a log file. Use this to create a log file at the named path with  defaults.
-        """
-        self.args = ArgumentParser()
-        self.user = User()
-        self.fs = Filesys(topfile)
-        self.util = UtilPysh()
-        self.log = Log(files=logfile)
-        self.scriptname = pathlib.Path(topfile).name
-
-
     def env(self, name, defval=None):
         """ Get an environment variable
         """
