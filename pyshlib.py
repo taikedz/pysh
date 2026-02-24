@@ -191,6 +191,7 @@ class Filesys:
         """
         self._script = pathlib.Path(asset_root)
         self._assetsdir = self._script.parent
+        self.scriptname = self._script.name
 
 
     def tempfile(self, dir_abspath=None) -> str:
@@ -412,7 +413,7 @@ class ArgumentParser:
         self._parser.add_argument(*a, **k)
 
 
-    def args(self, *names, **special:dict[str,list[str]]):
+    def args(self, *names, **choices:list[str]):
         """ Add named positional arguments
 
         For positional arguments with a value list, this constrains the discrete available choices
@@ -420,7 +421,7 @@ class ArgumentParser:
         for name in names:
             self._parser.add_argument(name)
 
-        for k,v in special.items():
+        for k,v in choices.items():
             if isinstance(v, list):
                 self._parser.add_argument(k, choices=v)
             else:
@@ -442,7 +443,7 @@ class ArgumentParser:
             self._parser.add_argument(flag, action="store_true")
 
 
-    def options(self, **opts:dict[str,Any]):
+    def options(self, **opts:Any):
         """ Add options with default values
 
         The default value is added as-is, with a type coercion of the same type as value, except in the case of a tuple
