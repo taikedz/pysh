@@ -2,6 +2,8 @@
 
 Mini-library to just set up a python replacement for shell scripting with the nice-to-haves
 
+Licensed under MIT License, do what you want with it (just retain the copyright notice with the file).
+
 ## Motivation
 
 Rather than write a lot of complicated shell scripting with its weird argument pass-arounds and global variables, lack of rich types, exception-based error handling, and all that, simply use python.
@@ -19,42 +21,37 @@ Can be used, for example, for install scripts, setup utilities, and more.
 
 ## Usage
 
-Install it
-
-```sh
-./install.sh
-```
-
-Use it anywhere
-
-```sh
-# Create a new project, add assets and executable
-pysh ./name-of-file.py
-```
-
-Run the resulting project
-
-```sh
-# Load venv etc, run script
-./name-of-file.py.sh arg1 arg2 ...
-```
+Add it to your project, or to your pthonpath. Import it, and use its handy implementations.
 
 Using python instead of raw shell scripting is now a .... piece o' pysh. (_unapologetic_)
 
-## `pysh` library
+## `pyshlib` library
 
-The main part of the `pysh` utility is the tooling added in the sidecar library.
+The main part of the `pyshlib` utility is the tooling added in the sidecar library.
 
-In this git repo, run `python3` and then
+Add it to yoru project then begin a script thus:
 
 ```python
-import files.pysh as pysh # in your project, just "import pysh"
-help(pysh)
+import pyshlib
+
+def main():
+    ... # your implementation
+
+
+if __name__ == "__main__":
+    # Nicer CLI behaviour
+    pyshlib.Main(main)
+```
+
+Try viewing help:
+
+```python
+help(pyshlib)
 ```
 
 ## Limitations
 
-Scripts that rely on a series of `sudo` calls may cause each one to require a password, due to each being in a new subshell. This is governed by the runtime sudo implementation.
+Scripts that rely on a series of `sudo` calls _may_ cause each one to require a password, due to each being in a new subshell. This is governed by the runtime sudo implementation.
 
 ## Example
 
@@ -65,53 +62,61 @@ Here's an example of a fictitious installer script. It takes arguments, uses log
 ```python
 # Set a custom log name (set to None for no actual log file)
 logname = "my-tools-installation.log"
-PYSH = pyshlib.PySh(__file__, logname)
+LOG = pyshlib.Log(files=logname)
+
+FS = pyshlib.Filesys(__file__)
+Sys = pyshlib.System()
 
 def main():
+    global LOG
     # Quickly define some arguments and parse them
-    PYSH.args.flags("--verbose", "--web") # bools
-    PYSH.args.options("--bindir", "~/.local/bin")
-    PYSH.args.positionals(rest="cmds", nargs="*")
-    args = PYSH.args.parse()
+    args = pyshlib.ArgumentParser()
+    args.flags("--verbose", "--web") # bools
+    args.options("--bindir", "~/.local/bin")
+    args.moreargs("target_cmds", nargs="*")
+    args = args.parse()
 
     if args.verbose:
         # Set a custom log that will display the minutiae
-        PYSH.set_log(pyshlib.LogPysh(
+        LOG = pyshlib.Log(
             files=logname,
-            level=pyshlib.LogLevel.DEBUG,
-            file_level=pyshlib.LogLevel.DEBUG
-            ))
+            level=pyshlib.Log.DEBUG,
+            file_level=pyshlib.Log.DEBUG
+            )
 
-    if args.cmds:
-        # Path expansions
-        bindest = PYSH.expandpath(args.bindir)
+    # Path expansions
+    bindest = FS.expand_path(args.bindir)
+    install_these = FS.glob(FS.asset_path()+"/main-bins/*")
 
-        mandatory = PYSH.fs.glob(PYSH.fs.localpath()+"/main-bins/*")
-        install_these = mandatory + args.cmds
+    if args.target_cmds:
+        install_these += args.target_cmds
 
-        PYSH.log.debug(f"Into {bindest}/ :")
+        LOG.debug(f"Into {bindest}/ :")
 
-        for item in install_these:
-            # copy from installer's location to deployment location
-            localfile = PYSH.localpath(item)
-            PYSH.log.debug(f"    Installing {localfile}")
+    for item in install_these:
+        # copy from installer's location to deployment location
+        LOG.debug(f"    Installing {item}")
 
-            PYSH.shell(f"cp {localfile} {bindest}/")
+        Sys.shell(f"cp {localfile} {bindest}/")
 
     if args.web:
-        if osname := PYSH.os_info()[1] in ["Ubuntu", "Debian"]:
+        if osname := Sys.os_info()[1] in ["Ubuntu", "Debian"]:
             command = "sudo apt-get install apache2"
 
         elif osname in ["Red Hat", "Fedora"]:
             command = "sudo dnf install httpd"
         else:
-            PYSH.log.error("Unsupported OS")
+            LOG.error("Unsupported OS")
             exit(1)
 
         print("Installing web server")
-        status, stdout, stderr = PYSH.cmd(command)
+        status, stdout, stderr = Sys.cmd(command)
         # If not success, bails with the output, else, runs silent
         assert status == 0, stderr
         print("Web server successsfully installed")
-```
 
+
+if __name__ == "__main__":
+    pyshlib.Main(main)
+
+```
