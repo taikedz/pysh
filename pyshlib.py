@@ -31,7 +31,7 @@ Import this library to gain fast access to common desired functionality.
 Provided as a single sidecar file for your convenience.
 """
 
-def Main(_func, error_mask="PY_ERRORS"):
+def Main(_func, error_mask="PY_ERRORS", ename=None):
     """Wrap your main function to suppress tracebacks (nicer for users)
 
     Specify an error mask, e.g. `PY_ERRORS` - if `export PY_ERRORS=true` is set in environment,
@@ -42,11 +42,11 @@ def Main(_func, error_mask="PY_ERRORS"):
         def main():
             ... # implementation here ...
 
-        if __name__ == "__main__":
-            pyshlib.Main(main)
+        pyshlib.Main(main, ename=__name__)
     """
     try:
-        _func()
+        if ename is None or ename == "__main__":
+            _func()
     except (KeyboardInterrupt,Exception) as e:
         if os.getenv(error_mask, "false").lower() == "true":
             raise
