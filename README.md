@@ -21,7 +21,14 @@ Can be used, for example, for install scripts, setup utilities, and more.
 
 ## Usage
 
-Add it to your project, or to your pthonpath. Import it, and use its handy implementations.
+Add it to your project, or to your pythonpath.
+
+```sh
+PYSHVER=v0.3.0 # Adjust for your desired version
+curl "https://raw.githubusercontent.com/taikedz/pysh/refs/tags/$PYSHVER/pyshlib.py" > myproject/pyshlib.py
+```
+
+Import it, and use its handy implementations.
 
 Using python instead of raw shell scripting is now a .... piece o' pysh. (_unapologetic_)
 
