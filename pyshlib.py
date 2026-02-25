@@ -21,7 +21,7 @@ import time
 from typing import Any
 
 # Current version - a series of numbers, optionally 'dev' at the end if not-released
-PYSH_VERSION=(0,3,0,)
+PYSH_VERSION=(0,3,1,)
 
 """ Convenience suite for system scripting in python.
 Add a single-import and use classes/functions with helpful defaults.
